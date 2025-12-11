@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LTC sur Bande Magnétique - Record vs Playback Ralenti</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            font-size: 1.4rem;
+            color: #00aaff;
+            margin-bottom: 5px;
+            font-family: 'Courier New', monospace;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .section-title {
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title.record {
+            background: linear-gradient(90deg, rgba(0,170,255,0.2), transparent);
+            color: #00aaff;
+            border-left: 4px solid #00aaff;
+        }
+        .section-title.playback {
+            background: linear-gradient(90deg, rgba(255,85,85,0.2), transparent);
+            color: #ff5555;
+            border-left: 4px solid #ff5555;
+        }
+        
+        .tape-container {
+            background: #0a0a0a;
+            border: 2px solid #333;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 25px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tape-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent 0px,
+                transparent 50px,
+                rgba(50,50,50,0.3) 50px,
+                rgba(50,50,50,0.3) 51px
+            );
+            pointer-events: none;
+        }
+        
+        .tape-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+        .tape-label {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: #888;
+            background: #1a1a1a;
+            padding: 4px 10px;
+            border-radius: 3px;
+        }
+        .tape-speed {
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 3px;
+        }
+        .tape-speed.normal {
+            background: #00aaff;
+            color: #000;
+        }
+        .tape-speed.slow {
+            background: #ff5555;
+            color: #000;
+        }
+        
+        svg {
+            width: 100%;
+            height: auto;
+            display: block;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .frame-info {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+            position: relative;
+            z-index: 1;
+        }
+        .frame-box {
+            text-align: center;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+        }
+        .frame-box.record {
+            background: rgba(0,170,255,0.15);
+            border: 1px solid #00aaff;
+            color: #00aaff;
+        }
+        .frame-box.playback {
+            background: rgba(255,85,85,0.15);
+            border: 1px solid #ff5555;
+            color: #ff5555;
+        }
+        .frame-tc {
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin-top: 3px;
+        }
+        
+        .comparison-box {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+        }
+        .stat-card h3 {
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .stat-card h3.record { color: #00aaff; }
+        .stat-card h3.playback { color: #ff5555; }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            padding: 4px 0;
+        }
+        .stat-label { color: #888; }
+        .stat-value { color: #ffaa00; }
+        .stat-value.highlight { color: #ff5555; }
+        
+        .arrow-section {
+            text-align: center;
+            padding: 15px;
+            font-size: 1.5rem;
+            color: #ff5555;
+        }
+        
+        .tape-visual {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+            padding: 10px;
+            background: #0a0505;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        .tape-reel {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid #444;
+            background: radial-gradient(circle, #222 30%, #111 70%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .tape-reel-center {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #555;
+        }
+        .tape-strip {
+            height: 30px;
+            background: linear-gradient(180deg, #3a2a1a 0%, #2a1a0a 50%, #3a2a1a 100%);
+            border-top: 2px solid #5a4a3a;
+            border-bottom: 2px solid #5a4a3a;
+            flex-grow: 1;
+            position: relative;
+            min-width: 200px;
+        }
+        .tape-strip::before {
+            content: 'MAGNETIC TAPE - LTC AUDIO TRACK';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Courier New', monospace;
+            font-size: 0.6rem;
+            color: #6a5a4a;
+            white-space: nowrap;
+        }
+        
+        .physics-note {
+            background: linear-gradient(135deg, #1a1a0a, #0a0a00);
+            border: 1px solid #555500;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+        }
+        .physics-note h4 {
+            color: #aaaa00;
+            margin-bottom: 10px;
+        }
+        .physics-note p {
+            color: #999;
+            line-height: 1.6;
+        }
+        .physics-note code {
+            color: #00ff88;
+            background: #1a1a1a;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 LTC SUR BANDE MAGNÉTIQUE</h1>
+        <p class="subtitle">Générateur LTC → Record Magnétoscope → Playback Ralenti 33% | 1080 50p</p>
+
+        <!-- Tape Visual -->
+        <div class="tape-visual">
+            <div class="tape-reel"><div class="tape-reel-center"></div></div>
+            <div class="tape-strip"></div>
+            <div class="tape-reel"><div class="tape-reel-center"></div></div>
+        </div>
+
+        <!-- SECTION 1: RECORD - Signal généré et enregistré -->
+        <div class="section-title record">
+            <span>⏺</span> RECORD — Signal LTC généré par le générateur (3 frames @ 50p)
+        </div>
+        
+        <div class="tape-container">
+            <div class="tape-bg"></div>
+            <div class="tape-header">
+                <span class="tape-label">📼 BANDE MAGNÉTIQUE — PISTE AUDIO LTC</span>
+                <span class="tape-speed normal">VITESSE BANDE: 100% (NORMAL)</span>
+            </div>
+            
+            <svg viewBox="0 0 1200 200" xmlns="http://www.w3.org/2000/svg">
+                <!-- Background -->
+                <rect x="0" y="0" width="1200" height="200" fill="#0d0d0d"/>
+                
+                <!-- Grid -->
+                <defs>
+                    <pattern id="gridRec" width="66.67" height="40" patternUnits="userSpaceOnUse">
+                        <path d="M 66.67 0 L 0 0 0 40" fill="none" stroke="#1a3a4a" stroke-width="0.5"/>
+                    </pattern>
+                </defs>
+                <rect x="50" y="25" width="1100" height="130" fill="url(#gridRec)"/>
+                
+                <!-- Center line -->
+                <line x1="50" y1="90" x2="1150" y2="90" stroke="#1a3a4a" stroke-width="1"/>
+                
+                <!-- Frame boundaries -->
+                <line x1="50" y1="20" x2="50" y2="160" stroke="#00aaff" stroke-width="2"/>
+                <line x1="416.67" y1="20" x2="416.67" y2="160" stroke="#00aaff" stroke-width="2" stroke-dasharray="5,3"/>
+                <line x1="783.33" y1="20" x2="783.33" y2="160" stroke="#00aaff" stroke-width="2" stroke-dasharray="5,3"/>
+                <line x1="1150" y1="20" x2="1150" y2="160" stroke="#00aaff" stroke-width="2"/>
+                
+                <!-- Frame labels -->
+                <text x="233" y="15" fill="#00aaff" font-size="11" text-anchor="middle" font-family="Courier New">FRAME 00:00:00:00</text>
+                <text x="600" y="15" fill="#00aaff" font-size="11" text-anchor="middle" font-family="Courier New">FRAME 00:00:00:01</text>
+                <text x="967" y="15" fill="#00aaff" font-size="11" text-anchor="middle" font-family="Courier New">FRAME 00:00:00:02</text>
+                
+                <!-- LTC Waveform Frame 1 (80 bits in ~366px = 4.58px/bit) -->
+                <path d="
+                    M 50 50 
+                    L 54.58 50 L 54.58 130 L 59.16 130 L 59.16 50 L 63.74 50 L 63.74 130 L 68.32 130
+                    L 68.32 50 L 72.9 50 L 72.9 130 L 77.48 130 L 77.48 50 L 82.06 50 L 82.06 130 L 86.64 130
+                    L 86.64 130 L 91.22 130 L 91.22 50 L 95.8 50 L 95.8 50 L 100.38 50 L 100.38 130 L 104.96 130
+                    L 104.96 130 L 109.54 130 L 109.54 50 L 114.12 50 L 114.12 50 L 118.7 50 L 118.7 130 L 123.28 130
+                    L 123.28 50 L 127.86 50 L 127.86 130 L 132.44 130 L 132.44 50 L 137.02 50 L 137.02 130 L 141.6 130
+                    L 141.6 50 L 146.18 50 L 146.18 130 L 150.76 130 L 150.76 130 L 155.34 130 L 155.34 50 L 159.92 50
+                    L 159.92 50 L 164.5 50 L 164.5 130 L 169.08 130 L 169.08 50 L 173.66 50 L 173.66 130 L 178.24 130
+                    L 178.24 50 L 182.82 50 L 182.82 130 L 187.4 130 L 187.4 50 L 191.98 50 L 191.98 130 L 196.56 130
+                    L 196.56 130 L 201.14 130 L 201.14 50 L 205.72 50 L 205.72 50 L 210.3 50 L 210.3 130 L 214.88 130
+                    L 214.88 130 L 219.46 130 L 219.46 50 L 224.04 50 L 224.04 50 L 228.62 50 L 228.62 130 L 233.2 130
+                    L 233.2 50 L 237.78 50 L 237.78 130 L 242.36 130 L 242.36 50 L 246.94 50 L 246.94 130 L 251.52 130
+                    L 251.52 50 L 256.1 50 L 256.1 130 L 260.68 130 L 260.68 130 L 265.26 130 L 265.26 50 L 269.84 50
+                    L 269.84 50 L 274.42 50 L 274.42 130 L 279 130 L 279 50 L 283.58 50 L 283.58 130 L 288.16 130
+                    L 288.16 50 L 292.74 50 L 292.74 130 L 297.32 130 L 297.32 50 L 301.9 50 L 301.9 130 L 306.48 130
+                    L 306.48 130 L 311.06 130 L 311.06 50 L 315.64 50 L 315.64 50 L 320.22 50 L 320.22 130 L 324.8 130
+                    L 324.8 130 L 329.38 130 L 329.38 50 L 333.96 50 L 333.96 50 L 338.54 50 L 338.54 130 L 343.12 130
+                    L 343.12 50 L 347.7 50 L 347.7 130 L 352.28 130 L 352.28 50 L 356.86 50 L 356.86 130 L 361.44 130
+                    L 361.44 50 L 366.02 50 L 366.02 130 L 370.6 130 L 370.6 50 L 375.18 50 L 375.18 130 L 379.76 130
+                    L 379.76 50 L 384.34 50 L 384.34 130 L 388.92 130 L 388.92 50 L 393.5 50 L 393.5 130 L 398.08 130
+                    L 398.08 130 L 402.66 130 L 402.66 50 L 407.24 50 L 407.24 50 L 411.82 50 L 411.82 130 L 416.67 130
+                " fill="none" stroke="#00aaff" stroke-width="2" stroke-linecap="square"/>
+                
+                <!-- LTC Waveform Frame 2 -->
+                <path d="
+                    M 416.67 130
+                    L 421.25 130 L 421.25 50 L 425.83 50 L 425.83 130 L 430.41 130 L 430.41 50 L 434.99 50
+                    L 434.99 130 L 439.57 130 L 439.57 50 L 444.15 50 L 444.15 130 L 448.73 130 L 448.73 50 L 453.31 50
+                    L 453.31 50 L 457.89 50 L 457.89 130 L 462.47 130 L 462.47 130 L 467.05 130 L 467.05 50 L 471.63 50
+                    L 471.63 50 L 476.21 50 L 476.21 130 L 480.79 130 L 480.79 130 L 485.37 130 L 485.37 50 L 489.95 50
+                    L 489.95 130 L 494.53 130 L 494.53 50 L 499.11 50 L 499.11 130 L 503.69 130 L 503.69 50 L 508.27 50
+                    L 508.27 130 L 512.85 130 L 512.85 50 L 517.43 50 L 517.43 50 L 522.01 50 L 522.01 130 L 526.59 130
+                    L 526.59 130 L 531.17 130 L 531.17 50 L 535.75 50 L 535.75 130 L 540.33 130 L 540.33 50 L 544.91 50
+                    L 544.91 130 L 549.49 130 L 549.49 50 L 554.07 50 L 554.07 130 L 558.65 130 L 558.65 50 L 563.23 50
+                    L 563.23 50 L 567.81 50 L 567.81 130 L 572.39 130 L 572.39 130 L 576.97 130 L 576.97 50 L 581.55 50
+                    L 581.55 50 L 586.13 50 L 586.13 130 L 590.71 130 L 590.71 130 L 595.29 130 L 595.29 50 L 599.87 50
+                    L 599.87 130 L 604.45 130 L 604.45 50 L 609.03 50 L 609.03 130 L 613.61 130 L 613.61 50 L 618.19 50
+                    L 618.19 130 L 622.77 130 L 622.77 50 L 627.35 50 L 627.35 50 L 631.93 50 L 631.93 130 L 636.51 130
+                    L 636.51 130 L 641.09 130 L 641.09 50 L 645.67 50 L 645.67 130 L 650.25 130 L 650.25 50 L 654.83 50
+                    L 654.83 130 L 659.41 130 L 659.41 50 L 663.99 50 L 663.99 130 L 668.57 130 L 668.57 50 L 673.15 50
+                    L 673.15 50 L 677.73 50 L 677.73 130 L 682.31 130 L 682.31 130 L 686.89 130 L 686.89 50 L 691.47 50
+                    L 691.47 50 L 696.05 50 L 696.05 130 L 700.63 130 L 700.63 130 L 705.21 130 L 705.21 50 L 709.79 50
+                    L 709.79 130 L 714.37 130 L 714.37 50 L 718.95 50 L 718.95 130 L 723.53 130 L 723.53 50 L 728.11 50
+                    L 728.11 130 L 732.69 130 L 732.69 50 L 737.27 50 L 737.27 130 L 741.85 130 L 741.85 50 L 746.43 50
+                    L 746.43 130 L 751.01 130 L 751.01 50 L 755.59 50 L 755.59 130 L 760.17 130 L 760.17 50 L 764.75 50
+                    L 764.75 50 L 769.33 50 L 769.33 130 L 773.91 130 L 773.91 130 L 778.49 130 L 778.49 50 L 783.33 50
+                " fill="none" stroke="#00aaff" stroke-width="2" stroke-linecap="square"/>
+                
+                <!-- LTC Waveform Frame 3 -->
+                <path d="
+                    M 783.33 50
+                    L 787.91 50 L 787.91 130 L 792.49 130 L 792.49 50 L 797.07 50 L 797.07 130 L 801.65 130
+                    L 801.65 50 L 806.23 50 L 806.23 130 L 810.81 130 L 810.81 50 L 815.39 50 L 815.39 130 L 819.97 130
+                    L 819.97 130 L 824.55 130 L 824.55 50 L 829.13 50 L 829.13 50 L 833.71 50 L 833.71 130 L 838.29 130
+                    L 838.29 130 L 842.87 130 L 842.87 50 L 847.45 50 L 847.45 50 L 852.03 50 L 852.03 130 L 856.61 130
+                    L 856.61 50 L 861.19 50 L 861.19 130 L 865.77 130 L 865.77 50 L 870.35 50 L 870.35 130 L 874.93 130
+                    L 874.93 130 L 879.51 130 L 879.51 50 L 884.09 50 L 884.09 130 L 888.67 130 L 888.67 50 L 893.25 50
+                    L 893.25 130 L 897.83 130 L 897.83 50 L 902.41 50 L 902.41 130 L 906.99 130 L 906.99 50 L 911.57 50
+                    L 911.57 50 L 916.15 50 L 916.15 130 L 920.73 130 L 920.73 130 L 925.31 130 L 925.31 50 L 929.89 50
+                    L 929.89 50 L 934.47 50 L 934.47 130 L 939.05 130 L 939.05 130 L 943.63 130 L 943.63 50 L 948.21 50
+                    L 948.21 130 L 952.79 130 L 952.79 50 L 957.37 50 L 957.37 130 L 961.95 130 L 961.95 50 L 966.53 50
+                    L 966.53 130 L 971.11 130 L 971.11 50 L 975.69 50 L 975.69 50 L 980.27 50 L 980.27 130 L 984.85 130
+                    L 984.85 130 L 989.43 130 L 989.43 50 L 994.01 50 L 994.01 130 L 998.59 130 L 998.59 50 L 1003.17 50
+                    L 1003.17 130 L 1007.75 130 L 1007.75 50 L 1012.33 50 L 1012.33 130 L 1016.91 130 L 1016.91 50 L 1021.49 50
+                    L 1021.49 50 L 1026.07 50 L 1026.07 130 L 1030.65 130 L 1030.65 130 L 1035.23 130 L 1035.23 50 L 1039.81 50
+                    L 1039.81 50 L 1044.39 50 L 1044.39 130 L 1048.97 130 L 1048.97 130 L 1053.55 130 L 1053.55 50 L 1058.13 50
+                    L 1058.13 130 L 1062.71 130 L 1062.71 50 L 1067.29 50 L 1067.29 130 L 1071.87 130 L 1071.87 50 L 1076.45 50
+                    L 1076.45 130 L 1081.03 130 L 1081.03 50 L 1085.61 50 L 1085.61 130 L 1090.19 130 L 1090.19 50 L 1094.77 50
+                    L 1094.77 130 L 1099.35 130 L 1099.35 50 L 1103.93 50 L 1103.93 130 L 1108.51 130 L 1108.51 50 L 1113.09 50
+                    L 1113.09 50 L 1117.67 50 L 1117.67 130 L 1122.25 130 L 1122.25 130 L 1126.83 130 L 1126.83 50 L 1131.41 50
+                    L 1131.41 50 L 1135.99 50 L 1135.99 130 L 1140.57 130 L 1140.57 50 L 1145.15 50 L 1145.15 130 L 1150 130
+                " fill="none" stroke="#00aaff" stroke-width="2" stroke-linecap="square"/>
+                
+                <!-- Time axis -->
+                <text x="50" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">0</text>
+                <text x="233" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">20</text>
+                <text x="416.67" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">40</text>
+                <text x="600" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">60</text>
+                <text x="783.33" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">80</text>
+                <text x="967" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">100</text>
+                <text x="1150" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">120 ms</text>
+                
+                <!-- Total duration indicator -->
+                <line x1="50" y1="192" x2="1150" y2="192" stroke="#00aaff" stroke-width="2"/>
+                <text x="600" y="198" fill="#00aaff" font-size="10" text-anchor="middle" font-family="Courier New">3 FRAMES = 60 ms</text>
+            </svg>
+            
+            <div class="frame-info">
+                <div class="frame-box record">
+                    <div>FRAME 1</div>
+                    <div class="frame-tc">00:00:00:00</div>
+                    <div>20 ms | 80 bits</div>
+                </div>
+                <div class="frame-box record">
+                    <div>FRAME 2</div>
+                    <div class="frame-tc">00:00:00:01</div>
+                    <div>20 ms | 80 bits</div>
+                </div>
+                <div class="frame-box record">
+                    <div>FRAME 3</div>
+                    <div class="frame-tc">00:00:00:02</div>
+                    <div>20 ms | 80 bits</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-section">
+            ⬇️ LECTURE BANDE À 33% DE VITESSE ⬇️
+        </div>
+
+        <!-- SECTION 2: PLAYBACK SLOW MOTION -->
+        <div class="section-title playback">
+            <span>▶️</span> PLAYBACK RALENTI 33% — Signal LTC étiré temporellement
+        </div>
+        
+        <div class="tape-container">
+            <div class="tape-bg"></div>
+            <div class="tape-header">
+                <span class="tape-label">📼 MÊME BANDE — LECTURE RALENTIE</span>
+                <span class="tape-speed slow">VITESSE BANDE: 33% (×0.33)</span>
+            </div>
+            
+            <svg viewBox="0 0 1200 200" xmlns="http://www.w3.org/2000/svg">
+                <!-- Background -->
+                <rect x="0" y="0" width="1200" height="200" fill="#0d0808"/>
+                
+                <!-- Grid -->
+                <defs>
+                    <pattern id="gridPlay" width="66.67" height="40" patternUnits="userSpaceOnUse">
+                        <path d="M 66.67 0 L 0 0 0 40" fill="none" stroke="#3a1a1a" stroke-width="0.5"/>
+                    </pattern>
+                </defs>
+                <rect x="50" y="25" width="1100" height="130" fill="url(#gridPlay)"/>
+                
+                <!-- Center line -->
+                <line x1="50" y1="90" x2="1150" y2="90" stroke="#3a1a1a" stroke-width="1"/>
+                
+                <!-- Frame boundaries (now 3x wider) -->
+                <line x1="50" y1="20" x2="50" y2="160" stroke="#ff5555" stroke-width="2"/>
+                <line x1="416.67" y1="20" x2="416.67" y2="160" stroke="#ff5555" stroke-width="2" stroke-dasharray="5,3"/>
+                <line x1="783.33" y1="20" x2="783.33" y2="160" stroke="#ff5555" stroke-width="2" stroke-dasharray="5,3"/>
+                <line x1="1150" y1="20" x2="1150" y2="160" stroke="#ff5555" stroke-width="2"/>
+                
+                <!-- Original frame reference (ghosted) -->
+                <rect x="50" y="25" width="122.22" height="130" fill="rgba(0,170,255,0.08)" stroke="#00aaff" stroke-width="1" stroke-dasharray="3,3"/>
+                <text x="111" y="40" fill="#00aaff" font-size="8" text-anchor="middle" font-family="Courier New" opacity="0.6">20ms orig.</text>
+                
+                <!-- Frame labels -->
+                <text x="233" y="15" fill="#ff5555" font-size="11" text-anchor="middle" font-family="Courier New">FRAME 00:00:00:00 (ÉTIRÉE)</text>
+                <text x="600" y="15" fill="#ff5555" font-size="11" text-anchor="middle" font-family="Courier New">FRAME 00:00:00:01 (ÉTIRÉE)</text>
+                <text x="967" y="15" fill="#ff5555" font-size="11" text-anchor="middle" font-family="Courier New">FRAME 00:00:00:02 (ÉTIRÉE)</text>
+                
+                <!-- LTC Waveform Frame 1 STRETCHED (80 bits in ~366px but 3x slower = 13.74px/bit) -->
+                <path d="
+                    M 50 50 
+                    L 63.74 50 L 63.74 130 L 77.48 130 L 77.48 50 L 91.22 50 L 91.22 130 L 104.96 130
+                    L 104.96 50 L 118.7 50 L 118.7 130 L 132.44 130 L 132.44 50 L 146.18 50 L 146.18 130 L 159.92 130
+                    L 159.92 130 L 173.66 130 L 173.66 50 L 187.4 50 L 187.4 50 L 201.14 50 L 201.14 130 L 214.88 130
+                    L 214.88 130 L 228.62 130 L 228.62 50 L 242.36 50 L 242.36 50 L 256.1 50 L 256.1 130 L 269.84 130
+                    L 269.84 50 L 283.58 50 L 283.58 130 L 297.32 130 L 297.32 50 L 311.06 50 L 311.06 130 L 324.8 130
+                    L 324.8 50 L 338.54 50 L 338.54 130 L 352.28 130 L 352.28 130 L 366.02 130 L 366.02 50 L 379.76 50
+                    L 379.76 50 L 393.5 50 L 393.5 130 L 407.24 130 L 407.24 50 L 416.67 50
+                " fill="none" stroke="#ff5555" stroke-width="2.5" stroke-linecap="square"/>
+                
+                <!-- LTC Waveform Frame 2 STRETCHED (continuing) -->
+                <path d="
+                    M 416.67 50
+                    L 421 50 L 421 130 L 434.74 130 L 434.74 50 L 448.48 50 L 448.48 130 L 462.22 130
+                    L 462.22 130 L 475.96 130 L 475.96 50 L 489.7 50 L 489.7 50 L 503.44 50 L 503.44 130 L 517.18 130
+                    L 517.18 130 L 530.92 130 L 530.92 50 L 544.66 50 L 544.66 50 L 558.4 50 L 558.4 130 L 572.14 130
+                    L 572.14 50 L 585.88 50 L 585.88 130 L 599.62 130 L 599.62 50 L 613.36 50 L 613.36 130 L 627.1 130
+                    L 627.1 130 L 640.84 130 L 640.84 50 L 654.58 50 L 654.58 130 L 668.32 130 L 668.32 50 L 682.06 50
+                    L 682.06 130 L 695.8 130 L 695.8 50 L 709.54 50 L 709.54 130 L 723.28 130 L 723.28 50 L 737.02 50
+                    L 737.02 50 L 750.76 50 L 750.76 130 L 764.5 130 L 764.5 130 L 778.24 130 L 778.24 50 L 783.33 50
+                " fill="none" stroke="#ff5555" stroke-width="2.5" stroke-linecap="square"/>
+                
+                <!-- LTC Waveform Frame 3 STRETCHED -->
+                <path d="
+                    M 783.33 50
+                    L 792 50 L 792 130 L 805.74 130 L 805.74 50 L 819.48 50 L 819.48 130 L 833.22 130
+                    L 833.22 50 L 846.96 50 L 846.96 130 L 860.7 130 L 860.7 50 L 874.44 50 L 874.44 130 L 888.18 130
+                    L 888.18 130 L 901.92 130 L 901.92 50 L 915.66 50 L 915.66 50 L 929.4 50 L 929.4 130 L 943.14 130
+                    L 943.14 130 L 956.88 130 L 956.88 50 L 970.62 50 L 970.62 50 L 984.36 50 L 984.36 130 L 998.1 130
+                    L 998.1 50 L 1011.84 50 L 1011.84 130 L 1025.58 130 L 1025.58 50 L 1039.32 50 L 1039.32 130 L 1053.06 130
+                    L 1053.06 130 L 1066.8 130 L 1066.8 50 L 1080.54 50 L 1080.54 130 L 1094.28 130 L 1094.28 50 L 1108.02 50
+                    L 1108.02 130 L 1121.76 130 L 1121.76 50 L 1135.5 50 L 1135.5 130 L 1150 130
+                " fill="none" stroke="#ff5555" stroke-width="2.5" stroke-linecap="square"/>
+                
+                <!-- Time axis (now 180ms total) -->
+                <text x="50" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">0</text>
+                <text x="172.22" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">20</text>
+                <text x="233" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">30</text>
+                <text x="355.56" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">50</text>
+                <text x="416.67" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">60</text>
+                <text x="538.89" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">80</text>
+                <text x="600" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">90</text>
+                <text x="722.22" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">110</text>
+                <text x="783.33" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">120</text>
+                <text x="905.56" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">140</text>
+                <text x="967" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">150</text>
+                <text x="1089.22" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">170</text>
+                <text x="1150" y="180" fill="#ffaa00" font-size="10" text-anchor="middle" font-family="Courier New">180 ms</text>
+                
+                <!-- Total duration indicator -->
+                <line x1="50" y1="192" x2="1150" y2="192" stroke="#ff5555" stroke-width="2"/>
+                <text x="600" y="198" fill="#ff5555" font-size="10" text-anchor="middle" font-family="Courier New">3 FRAMES ÉTIRÉES = 180 ms</text>
+            </svg>
+            
+            <div class="frame-info">
+                <div class="frame-box playback">
+                    <div>FRAME 1</div>
+                    <div class="frame-tc">00:00:00:00</div>
+                    <div>60 ms | 80 bits</div>
+                </div>
+                <div class="frame-box playback">
+                    <div>FRAME 2</div>
+                    <div class="frame-tc">00:00:00:01</div>
+                    <div>60 ms | 80 bits</div>
+                </div>
+                <div class="frame-box playback">
+                    <div>FRAME 3</div>
+                    <div class="frame-tc">00:00:00:02</div>
+                    <div>60 ms | 80 bits</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison Stats -->
+        <div class="comparison-box">
+            <div class="stat-card">
+                <h3 class="record">⏺ RECORD (Vitesse normale)</h3>
+                <div class="stat-row">
+                    <span class="stat-label">Frame rate</span>
+                    <span class="stat-value">50 fps</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Durée 1 frame</span>
+                    <span class="stat-value">20 ms</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Durée 3 frames</span>
+                    <span class="stat-value">60 ms</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Durée par bit</span>
+                    <span class="stat-value">250 µs</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Fréquence LTC</span>
+                    <span class="stat-value">2000 - 4000 Hz</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <h3 class="playback">▶️ PLAYBACK RALENTI 33%</h3>
+                <div class="stat-row">
+                    <span class="stat-label">Frame rate apparent</span>
+                    <span class="stat-value highlight">16.67 fps</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Durée 1 frame</span>
+                    <span class="stat-value highlight">60 ms</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Durée 3 frames</span>
+                    <span class="stat-value highlight">180 ms</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Durée par bit</span>
+                    <span class="stat-value highlight">750 µs</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Fréquence LTC</span>
+                    <span class="stat-value highlight">667 - 1333 Hz</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <h3 style="color:#ffaa00;">📊 FACTEURS DE CONVERSION</h3>
+                <div class="stat-row">
+                    <span class="stat-label">Facteur temps</span>
+                    <span class="stat-value">×3</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Facteur fréquence</span>
+                    <span class="stat-value">÷3</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Pitch shift</span>
+                    <span class="stat-value highlight">-19 demi-tons</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Timecode inchangé</span>
+                    <span class="stat-value">✓ (décodable)</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Bits par frame</span>
+                    <span class="stat-value">80 (constant)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Physics Note -->
+        <div class="physics-note">
+            <h4>⚡ PHYSIQUE DU SIGNAL</h4>
+            <p>
+                Sur la bande magnétique, le LTC est enregistré comme un signal audio analogique sur une piste longitudinale dédiée.<br><br>
+                <strong>Record:</strong> Les transitions magnétiques sont espacées de <code>250 µs</code> (à 50p).<br>
+                <strong>Playback 33%:</strong> La tête de lecture parcourt la bande 3× plus lentement → les mêmes transitions sont lues avec un espacement de <code>750 µs</code>.<br><br>
+                Le timecode reste <strong>parfaitement décodable</strong> car l'encodage biphase est auto-synchronisant — seule la fréquence change, pas le contenu binaire. 
+                C'est d'ailleurs ce qui permet la lecture en shuttle/jog sur les magnétoscopes professionnels.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
